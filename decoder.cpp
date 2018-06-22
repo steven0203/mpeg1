@@ -1,312 +1,198 @@
 #include"decoder.h"
-#include"code.h"
-#include"vlc.h"
 
-static vlc vlcDecoder;
-static const unsigned char default_intra_quantization_matrix[64]={
-    8,16,19,22,26,27,29,34,
-    16,16,22,24,27,29,34,37,
-    19,22,26,27,29,34,34,38,
-    22,22,26,27,29,34,37,40,
-    22,26,27,29,32,35,40,48,
-    26,27,29,32,35,40,48,58,
-    26,27,29,34,38,46,56,69,
-    27,29,35,38,46,56,69,83
+
+int sign(int input)
+{
+    if(input>0)
+        return 1;
+    if(input==0)
+        return 0;
+    return -1;
+}
+
+
+
+static double cosData[8][8]={
+    1.000000,0.980785,0.923880,0.831470,0.707107,0.555570,0.382683,0.195090,
+    1.000000,0.831470,0.382683,-0.195090,-0.707107,-0.980785,-0.923880,-0.555570,
+    1.000000,0.555570,-0.382683,-0.980785,-0.707107,0.195090,0.923880,0.831470,
+    1.000000,0.195090,-0.923880,-0.555570,0.707107,0.831470,-0.382683,-0.980785,
+    1.000000,-0.195090,-0.923880,0.555570,0.707107,-0.831470,-0.382684,0.980785,
+    1.000000,-0.555570,-0.382683,0.980785,-0.707107,-0.195090,0.923880,-0.831470,
+    1.000000,-0.831470,0.382683,0.195090,-0.707107,0.980785,-0.923879,0.555570,
+    1.000000,-0.980785,0.923880,-0.831470,0.707107,-0.555570,0.382683,-0.195090
 };
 
-static const unsigned char default_non_intra_quantization_matrix[64]={
-    16,16,16,16,16,16,16,16,
-    16,16,16,16,16,16,16,16,
-    16,16,16,16,16,16,16,16,
-    16,16,16,16,16,16,16,16,
-    16,16,16,16,16,16,16,16,
-    16,16,16,16,16,16,16,16,
-    16,16,16,16,16,16,16,16,
-    16,16,16,16,16,16,16,16
-};
 
-int get_sequence_header(dataStream &stream,sequenceHeader *header,unsigned char intraQuantizer[64],unsigned char nonIntraQuantizer[64])
+
+void deQuantize(int data[64],int quantizer[64],unsigned char quantizer_scale)
 {
-    header->horizotal_size=stream.getBits(12)>>(32-12);
-    header->vertical_size=stream.getBits(12)>>(32-12);
-    header->pel_aspect_ratio=stream.getBits(4)>>(32-4);
-    header->picture_rate=stream.getBits(4)>>(32-4);
-    header->bit_rate=stream.getBits(18)>>(32-18);
-    header->marker_bit=stream.getFirstBit();
-    header->vbv_buffer_size=stream.getBits(10)>>(32-10);
-    header->constrained_parameters_flag=stream.getFirstBit();
-    header->load_intra_quantizer_matrix=stream.getFirstBit();
-    header->load_non_intra_quantizer_matrix=stream.getFirstBit();
-    if(header->load_intra_quantizer_matrix)
-        for(int i=0;i<64;++i)
-            intraQuantizer[i]=stream.getBits(8)>>(32-8);
-    else 
-        for(int i=0;i<64;++i)
-            intraQuantizer[i]=default_intra_quantization_matrix[i];
-    if(header->load_non_intra_quantizer_matrix)
-        for(int i=0;i<64;++i)
-            nonIntraQuantizer[i]=stream.getBits(8)>>(32-8);
-    else 
-        for(int i=0;i<64;++i)
-            nonIntraQuantizer[i]=default_non_intra_quantization_matrix[i];
-    stream.getNextStartCode();
-    if(stream.next_start_code==extension_start_code)
-        getExtensionData(stream);
-    if(stream.next_start_code==user_data_start_code)
-        getUserData(stream);
-    return 0;
+    for(int i=1;i<64;++i)
+    {
+        data[i]=(2*data[i]*quantizer[i]*quantizer_scale)/16;
+        if((data[i]&1)==0)
+            data[i]=data[i]-sign(data[i]);
+        if(data[i]>2047)
+            data[i]=2047;
+        if(data[i]<-2048)
+            data[i]=-2048;
+    }
+    data[0]=data[0]*8;
 }
 
-
-
-void getExtensionData(dataStream &stream)
+void deQuantize(int data[6][64],int quantizer[64],unsigned char quantizer_scale)
 {
-    unsigned int bits=stream.getBits(24);
-    while(bits!=256)
+    for(int index=0;index<6;++index)
     {
-        bits=(bits<<8)^(stream.getBits(8)>>16);
-    }
-    stream.getNextStartCode();
-}
-
-void getUserData(dataStream &stream)
-{
-    unsigned int bits=stream.getBits(24);
-    while(bits!=256)
-    {
-        bits=(bits<<8)^(stream.getBits(8)>>16);
-    }
-    stream.getNextStartCode();
-}
-
-int group_of_pictures(dataStream &stream,gopHeader *gop,int &pictureNumber,int limit)
-{
-    gop->time_code=stream.getBits(25)>>(32-25);
-    gop->closed_gop=stream.getFirstBit();
-    gop->broken_link=stream.getFirstBit();
-    stream.getNextStartCode();
-    if(stream.next_start_code==extension_start_code)
-        getExtensionData(stream);
-    if(stream.next_start_code==user_data_start_code)
-        getUserData(stream);
-    pictureHeader pHeader;
-    while(stream.next_start_code==picture_start_code)
-    {
-        printf("picture %d\n",++pictureNumber);
-        get_picture(stream,&pHeader);
-        if(pictureNumber==limit)
-            break;
-    }
-    return 0;
-}
-
-int get_picture(dataStream &stream,pictureHeader *header)
-{
-    unsigned char tmp;
-    header->temporal_reference=stream.getBits(10)>>(32-10);
-    header->picture_coding_type=stream.getBits(3)>>(32-3);
-    header->vbv_delay=stream.getBits(16)>>(16);
-    if(header->picture_coding_type==2||header->picture_coding_type==3)
-    {
-        header->full_pel_forward_vector=stream.getFirstBit();
-        tmp=stream.getBits(3)>>(32-3);
-        header->forward_r_size=tmp-1;
-        header->forward_f=1<<(tmp-1);
-    }
-    if(header->picture_coding_type==3)
-    {
-        header->full_pel_backward_vector=stream.getFirstBit();
-        tmp=stream.getBits(3)>>(32-3);
-        header->backward_r_size=tmp-1;
-        header->backward_f=1<<(tmp-1);
-    }
-    while(stream.getFirstBit())
-    {
-        stream.getBits(8);
-    }
-    stream.getNextStartCode();
-    if(stream.next_start_code==extension_start_code)
-        getExtensionData(stream);
-    if(stream.next_start_code==user_data_start_code)
-        getUserData(stream);
-    printf("temporal_reference %d\n",header->temporal_reference);
-    printf("picture_coding_type %d\n",header->picture_coding_type);
-    printf("vbv_delay %d\n",header->vbv_delay);
-    sliceHeader sHeader;
-    int i=0;
-    while(stream.next_start_code>=slice_start_code_low&&stream.next_start_code<=slice_start_code_up)
-    {
-        get_slice(stream,&sHeader,header);
-    }
-    return 0;
-}
-int get_slice(dataStream & stream,sliceHeader *header,pictureHeader *pHeader)
-{
-    printf("slice code  %x \n",stream.next_start_code);
-    header->slice_vertical_position=(unsigned char)(stream.next_start_code&0x000000FF);
-    header->quantizer_scale=stream.getBits(5)>>(32-5);
-
-    while(stream.getFirstBit())
-    {
-        stream.getBits(8);
-    }
-    printf("quantizer_scale %d\n",header->quantizer_scale);
-    int index=0;
-    while(1)
-    {
-        get_macroblock(stream,pHeader,header,index);
-        if(stream.getBits(23)==0)
+        for(int i=1;i<64;++i)
         {
-            stream.seekBack(23);
-            break;
+            data[index][i]=(2*data[index][i]*quantizer[i]*quantizer_scale)/16;
+            if((data[index][i]&1)==0)
+                data[index][i]=data[index][i]-sign(data[index][i]);
+            if(data[index][i]>2047)
+                data[index][i]=2047;
+            if(data[index][i]<-2048)
+                data[index][i]=-2048;
         }
-        stream.seekBack(23);
-
+        data[index][0]=data[index][0]*8;
     }
-    stream.getNextStartCode();
-    return 0;
+
 }
 
-
-int get_macroblock(dataStream &stream,pictureHeader *pHeader,sliceHeader *sHeader,int &index)
-{   
-
-    unsigned short address=vlcDecoder.getMacroAddress(stream);
-    unsigned short escape=0;
-    while(address==macroblock_stuffing)
-        address=vlcDecoder.getMacroAddress(stream);
-    while(address==macroblock_escape)
-    {   
-        escape+=1;
-        address=vlcDecoder.getMacroAddress(stream);
-    }
-    address=escape*33+address;
-    index+=address;
-    printf("macroblock  %d \n",index);
-    printf("address increment  %d\n",address);
-    macroblock_type type;
-    type=vlcDecoder.getMacroType(stream,pHeader->picture_coding_type);
-    printf("type.quant %d\n",type.quant);
-    printf("type.motion_forward %d\n",type.motion_forward);
-    printf("type.motion_backward %d\n",type.motion_backward);
-    printf("type.pattern %d\n",type.pattern);
-    printf("type.intra %d\n",type.intra);
-    if(type.quant)
-    {
-        sHeader->quantizer_scale=stream.getBits(5)>>(32-5);
-        printf("quantizer_scale %d\n");
-    }
-
-    int motion_horizontal_forward_code=0,motion_vertical_forward_code=0;
-    unsigned char motion_horizontal_forward_r=0,motion_vertical_forward_r=0;
-    if(type.motion_forward)
-    {
-        motion_horizontal_forward_code=vlcDecoder.getMotionCode(stream);
-        if(pHeader->forward_f!=1&&motion_horizontal_forward_code!=0)
-            motion_horizontal_forward_r=stream.getBits(pHeader->forward_r_size)>>(32-pHeader->forward_r_size);
-        motion_vertical_forward_code=vlcDecoder.getMotionCode(stream);
-        if(pHeader->forward_f!=1&&motion_vertical_forward_code!=0)
-            motion_vertical_forward_r=stream.getBits(pHeader->forward_r_size)>>(32-pHeader->forward_r_size);
-        printf("motion_horizontal_forward_code %d\n",motion_horizontal_forward_code);
-        printf("motion_vertical_forward_code %d\n",motion_vertical_forward_code);
-
-    }
-    int motion_horizontal_backward_code=0,motion_vertical_backward_code=0;
-    unsigned char motion_horizontal_backward_r=0,motion_vertical_backward_r=0;
-    if(type.motion_backward)
-    {
-        motion_horizontal_backward_code=vlcDecoder.getMotionCode(stream);
-        if ((pHeader->backward_f != 1)&&(motion_horizontal_backward_code != 0))
-            motion_horizontal_backward_r=stream.getBits(pHeader->backward_r_size)>>(32-pHeader->backward_r_size);
-        motion_vertical_backward_code=vlcDecoder.getMotionCode(stream);
-        if ((pHeader->backward_f != 1)&&(motion_vertical_backward_code != 0))
-            motion_vertical_backward_r=stream.getBits(pHeader->backward_r_size)>>(32-pHeader->backward_r_size);
-    }
-    unsigned char cbp=0;
-    if(type.pattern)
-        cbp=vlcDecoder.getCBP(stream);
-    bool pattern_code[6];
-    printf("pattern code \n");
-    for(int i=0;i<6;++i)
-    {
-        pattern_code[i] = 0;
-        if ( cbp & (1<<(5-i)) ) 
-            pattern_code[i] = 1;
-        if (type.intra)pattern_code[i] = 1 ;
-        printf("%d ", pattern_code[i]);
-    }
-    printf("\n");
-    for(int i=0;i<6;++i)
-        get_block(stream,pattern_code,i,type,pHeader);
-    if(pHeader->picture_coding_type==D_picture_type)
-        stream.getFirstBit();
-}
-
-
-int get_block(dataStream & stream,bool pattern_code[6],int i,macroblock_type type,pictureHeader *pHeader)
+void zigZag(int block[64])
 {
-    printf("block %d \n",i);
-    unsigned char dct_dc_size;
-    unsigned char dct_dc_differential;
-    dct_coeff dctCoeff;
-    if(pattern_code[i])
+    int tmp[64];
+    for(int i=0;i<64;++i)
+        tmp[i]=block[i];
+    for (int i =0, n = 0; i < 8 * 2; i++)
+		for (int j = (i < 8) ? 0 : i-8+1; j <= i && j < 8; j++)
+			block[(i&1)? j*(8-1)+i : (i-j)*8+j ] = tmp[n++];
+}
+
+void zigZag(int block[6][64])
+{
+    int tmp[64];
+    for(int index=0;index<6;++index)
     {
-        if(type.intra)
+        for(int i=0;i<64;++i)
+        tmp[i]=block[index][i];
+        for (int i =0, n = 0; i < 8 * 2; i++)
+		    for (int j = (i < 8) ? 0 : i-8+1; j <= i && j < 8; j++)
+			    block[index][(i&1)? j*(8-1)+i : (i-j)*8+j ] = tmp[n++];
+    }
+
+}
+
+
+
+
+void IDCT(int block[64])
+{
+    int originBlock[64],N=8;
+    for(int i=0;i<64;++i)
+        originBlock[i]=block[i];
+    double coefficient1,coefficient2;
+    for(int i=0;i<N;i++)
+    {
+        for(int j=0;j<N;j++)
         {
-            if (i<4)
-            {
-                dct_dc_size=vlcDecoder.getDctDcSizeLum(stream);
-                printf("dct_dc_size lum  %d\n",dct_dc_size);
-                if(dct_dc_size!=0)
+            double tmp=0.0;
+            for(int p=0;p<N;p++)
+                for(int q=0;q<N;q++)
                 {
-                    dct_dc_differential=stream.getBits(dct_dc_size)>>(32-dct_dc_size);
-                    printf("dct_dc diff %d\n",dct_dc_differential);
+                    if(p==0) coefficient1=0.353553391;
+                    else coefficient1=0.5;
+                    if(q==0) coefficient2=0.353553391;
+                    else coefficient2=0.5;
+                    tmp+=coefficient1*coefficient2*originBlock[p*N+q]*cosData[i][p]*cosData[j][q];
                 }
-            }
-            else
-            {
-                dct_dc_size=vlcDecoder.getDctDcSizeChr(stream);
-                 printf("dct_dc_size chr  %d\n",dct_dc_size);
-                if(dct_dc_size!=0)
-                {
-                    dct_dc_differential=stream.getBits(dct_dc_size)>>(32-dct_dc_size);
-                    printf("dct_dc diff %d\n",dct_dc_differential);
-                }
-            }
-        }
-        else
+            block[i*N+j]=(int)tmp;
+        } 
+    }
+
+}
+void IDCT(int block[6][64])
+{
+    int originBlock[64],N=8;
+    for(int index=0;index<6;++index)
+    {
+        for(int i=0;i<64;++i)
+            originBlock[i]=block[index][i];
+        double coefficient1,coefficient2;
+        for(int i=0;i<N;i++)
         {
-            dctCoeff=vlcDecoder.getDctCoeff(stream,dct_coeff_first);
-            printf("dct_coeff_first run : %d level : %d \n ",dctCoeff.run,dctCoeff.level);
-        }
-        if(pHeader->picture_coding_type!=D_picture_type)
-        {
-            dctCoeff=vlcDecoder.getDctCoeff(stream,dct_coeff_next);
-            while(dctCoeff.run!=end_of_block_run)
+            for(int j=0;j<N;j++)
             {
-                printf("dct_coeff_next : %d level : %d \n",dctCoeff.run,dctCoeff.level);
-                dctCoeff=vlcDecoder.getDctCoeff(stream,dct_coeff_next);
-            }
-            printf("EOB\n");
+                double tmp=0.0;
+                for(int p=0;p<N;p++)
+                    for(int q=0;q<N;q++)
+                    {
+                        if(p==0) coefficient1=0.353553391;
+                        else coefficient1=0.5;
+                        if(q==0) coefficient2=0.353553391;
+                        else coefficient2=0.5;
+                        tmp+=coefficient1*coefficient2*originBlock[p*N+q]*cosData[i][p]*cosData[j][q];
+                    }
+                block[index][i*N+j]=(int)tmp;
+            } 
         }
     }
+
 }
 
 
-int video_sequence(dataStream & stream,int pictureLimit)
+void levelShift(int block[64])
 {
-    stream.getNextStartCode();
-    sequenceHeader seqHeader;
-    unsigned char intraQuantizationMatrix[64];
-    unsigned char nonIntraQuantizationMatrix[64];
-    gopHeader gHeader;
-    int pictureNum=0;
-    while(stream.next_start_code==sequence_header_code)
+    for(int i=0;i<64;++i)
     {
-        get_sequence_header(stream,&seqHeader,intraQuantizationMatrix,nonIntraQuantizationMatrix);
-        while(stream.next_start_code==group_start_code)
+        //block[i]+=128;
+        if(block[i]<0)
+            block[i]=0;
+        if(block[i]>255)
+            block[i]=255;
+    }
+}
+
+void levelShift(int block[6][64])
+{
+    for(int index=0;index<6;++index)
+    {
+        for(int i=0;i<64;++i)
         {
-            group_of_pictures(stream,&gHeader,pictureNum,pictureLimit);
+            //block[i]+=128;
+            if(block[index][i]<0)
+                block[index][i]=0;
+            if(block[index][i]>255)
+                block[index][i]=255;
         }
     }
+
+}
+
+
+
+void YCbCrtoRGB(picture &input,Mat *result)
+{
+    double r,g,b,y,Cb,Cr;
+    for(int i=0;i<input.height;++i)
+        for(int j=0;j<input.width;++j)
+        {
+            y=(double)input.data[i*input.width+j].y;
+            Cb=(double)input.data[i*input.width+j].cb;
+            Cr=(double)input.data[i*input.width+j].cr;
+            r=y+1.402*(Cr-128.0);
+            g=y-0.34414*(Cb-128.0)-0.71414*(Cr-128.0);
+            b=y+1.774*(Cb-128.0);
+            r=r>255?255:r;
+            g=g>255?255:g;
+            b=b>255?255:b;
+            r=r<0?0:r;
+            g=g<0?0:g;
+            b=b<0?0:b;
+
+            result->at<Vec3b>(i,j)[0]=b;
+            result->at<Vec3b>(i,j)[1]=g;
+            result->at<Vec3b>(i,j)[2]=r;
+
+        }
 }

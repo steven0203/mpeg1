@@ -29,4 +29,89 @@ typedef struct{
     int level;
 }dct_coeff;
 
+
+typedef struct
+{
+    unsigned int horizotal_size;
+    unsigned int vertical_size;
+    unsigned char pel_aspect_ratio;
+    unsigned char picture_rate;
+    unsigned int bit_rate ;
+    bool marker_bit;
+    unsigned int vbv_buffer_size;
+    bool constrained_parameters_flag;
+    bool load_intra_quantizer_matrix;
+    bool load_non_intra_quantizer_matrix;
+
+}sequenceHeader;
+
+
+typedef struct
+{
+    unsigned int time_code;
+    bool closed_gop;
+    bool broken_link;
+}gopHeader;
+
+typedef struct
+{
+    unsigned short temporal_reference;
+    unsigned char picture_coding_type;
+    unsigned short vbv_delay;
+    bool full_pel_forward_vector;
+    unsigned char forward_f;
+    unsigned char forward_r_size;
+    bool full_pel_backward_vector;
+    unsigned char backward_f;
+    unsigned char backward_r_size;
+
+}pictureHeader;
+
+typedef struct
+{
+    unsigned char slice_vertical_position ;
+    unsigned char quantizer_scale;
+}sliceHeader;
+
+typedef struct
+{
+    unsigned int address_increment;
+    bool quant;
+    bool motion_forward;
+    bool motion_backward;
+    bool pattern;
+    bool intra;
+}macroblockHeader;
+
+
+
+typedef struct
+{
+    bool quant;
+    bool motion_forward;
+    bool motion_backward;
+    bool pattern;
+    bool intra;
+}macroblock_type;
+
+typedef struct
+{
+    int y;
+    int cr;
+    int cb;
+}yCbCr;
+
+
+
+typedef struct
+{
+    int height;
+    int width;
+    int mb_width;
+    int mb_height;
+    yCbCr *data;
+}picture;
+
+
+
 #endif

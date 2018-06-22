@@ -6,15 +6,6 @@ using namespace std;
 #include "code.h"
 
 
-typedef struct
-{
-    bool quant;
-    bool motion_forward;
-    bool motion_backward;
-    bool pattern;
-    bool intra;
-}macroblock_type;
-
 
 class vlc
 {
