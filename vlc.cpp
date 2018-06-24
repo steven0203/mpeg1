@@ -478,6 +478,7 @@ macroblock_type vlc::getMacroType(dataStream &stream,unsigned char type)
         for(int i=0;i<6;++i)
         {
             code=(code)|(stream.getFirstBit()<<(7-i));
+            //First check the code length i,next check the code .
             switch(i)
             {
                 case(0):
@@ -552,6 +553,7 @@ int vlc::getMotionCode(dataStream &stream)
     for(int i=0;i<11;++i)
     {
         code=(code)|(stream.getFirstBit()<<(15-i));
+        //First check the code length i,next check the code .
         switch(i)
         {
             case(0):
@@ -637,7 +639,7 @@ unsigned short vlc::getCBP(dataStream &stream)
     for(int i=0;i<9;++i)
     {
         code=(code)|(stream.getFirstBit()<<(15-i));
-
+        //First check the code length i,next check the code .
         switch(i)
         {
             case(0):
@@ -714,7 +716,6 @@ unsigned char vlc::getDctDcSizeLum(dataStream &stream)
         }
     }
 }
-
 unsigned char vlc::getDctDcSizeChr(dataStream &stream)
 {
     unsigned char code=0;
@@ -726,57 +727,7 @@ unsigned char vlc::getDctDcSizeChr(dataStream &stream)
             return dctDcSizeChrTable[code];
     }
 }
-/*
-dct_coeff vlc::get \(dataStream &stream,unsigned short tag)
-{
-    unsigned short code=0;
-    dct_coeff result;
-    bool negative;
-    result.run=0;
-    result.level=1;
-    code=stream.getFirstBit();
-    if(tag==dct_coeff_first&&code==dct_coeff_first)
-    {
-        negative=stream.getFirstBit();
-        if(negative)
-            result.level=result.level*-1;
-        return result;
-    }
-    code=(code<<1)|stream.getFirstBit();
-    if(tag==dct_coeff_next&&code==dct_coeff_next)
-    {
-        negative=stream.getFirstBit();
-        if(negative)
-            result.level=result.level*(-1);
-        return result;
-    }
-    if(code==end_of_block)
-    {
-        result.run=end_of_block_run;
-        return result;
-    }
-    code=code<<14;
-    for(int i=0;i<14;++i)
-    {
-        code=(code)|(stream.getFirstBit()<<(13-i));
-        if(dctCoeffTable.count(code)>0&&dctCoeffLength[code]==(i+3))
-        {
-            result=dctCoeffTable[code];
-            if(result.run==escape_run)
-            {
-                result=getDctCoeffFixed(stream);
-            }
-            else
-            {
-                negative=stream.getFirstBit();
-                if(negative)
-                    result.level=result.level*(-1);
-            }
-            return result;
-        }
-    }       
 
-}*/
 dct_coeff vlc::getDctCoeff(dataStream &stream,unsigned short tag)
 {
     unsigned short code=0;
@@ -811,6 +762,7 @@ dct_coeff vlc::getDctCoeff(dataStream &stream,unsigned short tag)
     for(int i=0;i<14;++i)
     {
         code=(code)|(stream.getFirstBit()<<(13-i));
+        //First check the code length i,next check the code .
 
         switch(i)
         {
@@ -856,6 +808,7 @@ dct_coeff vlc::getDctCoeff(dataStream &stream,unsigned short tag)
                             result.level=result.level*(-1);
                         return result;
                     }
+                //When the run of dct_coeff is escape,it need to do fixed length code decoding.  
                 if(code==dct_coeff_code[14])
                 {    
                     result=getDctCoeffFixed(stream);
