@@ -8,7 +8,7 @@
 using namespace cv;
 void zigZag(int [6][64]);
 
-void deQuantize(int [6][64],int [64],unsigned char );
+void deQuantize(int [6][64],int [64],unsigned char ,bool);
 
 void IDCT(int [6][64]);
 
@@ -21,7 +21,7 @@ void IDCT(int [64]);
 
 void levelShift(int [64]);
 
-void YCbCrtoRGB(picture &,Mat *);
+void YCbCrtoRGB(picture *,Mat *);
 
 
 

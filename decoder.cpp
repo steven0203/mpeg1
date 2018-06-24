@@ -40,22 +40,50 @@ void deQuantize(int data[64],int quantizer[64],unsigned char quantizer_scale)
     data[0]=data[0]*8;
 }
 
-void deQuantize(int data[6][64],int quantizer[64],unsigned char quantizer_scale)
+void deQuantize(int data[6][64],int quantizer[64],unsigned char quantizer_scale,bool intra)
 {
-    for(int index=0;index<6;++index)
+    switch(intra)
     {
-        for(int i=1;i<64;++i)
+        case true:
         {
-            data[index][i]=(2*data[index][i]*quantizer[i]*quantizer_scale)/16;
-            if((data[index][i]&1)==0)
-                data[index][i]=data[index][i]-sign(data[index][i]);
-            if(data[index][i]>2047)
-                data[index][i]=2047;
-            if(data[index][i]<-2048)
-                data[index][i]=-2048;
+            for(int index=0;index<6;++index)
+            {
+                for(int i=1;i<64;++i)
+                {
+                    data[index][i]=(2*data[index][i]*quantizer[i]*quantizer_scale)/16;
+                    if((data[index][i]&1)==0)
+                        data[index][i]=data[index][i]-sign(data[index][i]);
+                    if(data[index][i]>2047)
+                        data[index][i]=2047;
+                    if(data[index][i]<-2048)
+                        data[index][i]=-2048;
+                }
+                data[index][0]=data[index][0]*8;
+            }
+            break;
         }
-        data[index][0]=data[index][0]*8;
-    }
+        case false:
+        {
+            for(int index=0;index<6;++index)
+            {
+                for(int i=0;i<64;++i)
+                {
+                    int tmp=data[index][i];
+                    data[index][i]=((2*data[index][i]+sign(data[index][i]))*quantizer[i]*quantizer_scale)/16;
+                    if((data[index][i]&1)==0)
+                        data[index][i]=data[index][i]-sign(data[index][i]);
+                    if(data[index][i]>2047)
+                        data[index][i]=2047;
+                    if(data[index][i]<-2048)
+                        data[index][i]=-2048;
+                    if(tmp==0)
+                        data[index][i]=0;
+                }
+            }
+            break;
+        }
+    };
+   
 
 }
 
@@ -171,15 +199,15 @@ void levelShift(int block[6][64])
 
 
 
-void YCbCrtoRGB(picture &input,Mat *result)
+void YCbCrtoRGB(picture *input,Mat *result)
 {
     double r,g,b,y,Cb,Cr;
-    for(int i=0;i<input.height;++i)
-        for(int j=0;j<input.width;++j)
+    for(int i=0;i<input->height;++i)
+        for(int j=0;j<input->width;++j)
         {
-            y=(double)input.data[i*input.width+j].y;
-            Cb=(double)input.data[i*input.width+j].cb;
-            Cr=(double)input.data[i*input.width+j].cr;
+            y=(double)input->data[i*input->width+j].y;
+            Cb=(double)input->data[i*input->width+j].cb;
+            Cr=(double)input->data[i*input->width+j].cr;
             r=y+1.402*(Cr-128.0);
             g=y-0.34414*(Cb-128.0)-0.71414*(Cr-128.0);
             b=y+1.774*(Cb-128.0);

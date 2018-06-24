@@ -3,44 +3,89 @@
 #include"video.h"
 #include <opencv2/opencv.hpp>
 #include"decoder.h"
+#include<ctime>
+#include<pthread.h>
+#include<queue>
+#include<windows.h>
+#include<cstdlib>
+#include"code.h"
+
 using namespace cv;
+using namespace std;
+
+double pictue_rate_define[8]={
+    23.976,24,25,29.97,30,50,59.94,60
+};
+
+typedef struct
+{
+    dataStream inputStream;
+    queue<Mat *>*videoBuffer;
+}videoArgs;
+
+
+void* videoThread(void *);
+
+
 
 int main(int argc,char ** argv)
 {
-    FILE * inputFile=fopen("MPEG_Files/I_ONLY.M1V","rb");
+    //Check the arguments and whether the file can open.
+    if(argc<2)
+    {
+        printf("Too few arguments\n");
+        return 0;
+    }
+    FILE * inputFile=fopen(argv[1],"rb");
     if(inputFile==NULL)
     {
         fputs ("Input file error",stderr); 
         return 0;
     }
-    picture tmp;
     dataStream stream(inputFile);
-    int limit=1;
-    video_sequence(stream,5,tmp);
+    
+    time_t t1=time(NULL);
 
-    Mat *img=new Mat();
-    img->create(tmp.height,tmp.width,CV_8UC3);
+    //Create thread for decoding the video.
+    queue<Mat *>*videoDisplayBuffer=new queue<Mat *>();
+    videoArgs *vArgs=(videoArgs*)malloc(sizeof(vArgs));
+    vArgs->inputStream=stream;
+    vArgs->videoBuffer=videoDisplayBuffer;
+    pthread_t vThread;    
+    pthread_create(&vThread, NULL, videoThread,(void*)vArgs); 
 
-    YCbCrtoRGB(tmp,img);
+
+    Sleep(800);
+    sequenceHeader videoHeader=getSeqHeader();
+    int delay=1000/pictue_rate_define[videoHeader.picture_rate]-10;
+    Mat *display;
 
     while(true){
-        imshow("Display window", *img);     
-        if(cvWaitKey(10)==27){                      
+        while(videoDisplayBuffer->empty()&&!videoIsEnd())
+        {
+            Sleep(100);
+        }
+        if(videoDisplayBuffer->empty()&&videoIsEnd())
+            break;
+        display=videoDisplayBuffer->front();
+        videoDisplayBuffer->pop();
+        imshow("Display window", *display); 
+        if(cvWaitKey(delay)==27){                      
             break;
         }
+
+     
     }
-   /* printf("%x\n",stream.next_start_code);
-    pictureHeader tmp2;
-    if(stream.next_start_code==picture_start_code)
-    {
-        get_picture(stream,&tmp2);
-        printf("%x\n",stream.next_start_code);
-    }
-    sliceHeader tmp3;
-    if(stream.next_start_code>=slice_start_code_low&&stream.next_start_code<=slice_start_code_up)
-    {
-        get_slice(stream,&tmp3,stream.next_start_code,&tmp2);
-        printf("%x\n",stream.next_start_code);
-    }*/
+
+    pthread_join(vThread, NULL);
+    printf("%d\n",time(NULL)-t1);
+
     fclose(inputFile);
+}
+
+
+void* videoThread(void * args)
+{
+    video_sequence(((videoArgs*)args)->inputStream,((videoArgs*)args)->videoBuffer);
+    pthread_exit(NULL); 
 }

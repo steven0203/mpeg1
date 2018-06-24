@@ -146,24 +146,9 @@ unsigned char macroblock_type_code_I[2]={
     0b1<<7,0b01<<6
 };
 
-unsigned char macroblock_type_code_P[7]={
-    0b1<<7,0b01<<6,0b001<<5,0b00011<<3,
-    0b00010<<3,0b00001<<3,0b000001<<2
-};
-
-unsigned char type_code_length_P[7]={
-    1,2,3,5,5,5,6
-};
-
-unsigned char macroblock_type_code_B[11]={
-    2<<6,3<<6,2<<5,3<<5,2<<4,3<<4,3<<3,2<<3,
-    3<<2,2<<2,1<<2
-};
 
 
-unsigned char type_code_length_B[11]={
-    2,2,3,3,4,4,5,5,6,6,6
-};
+
 
 
 macroblock_type  typeI[2]={
@@ -346,41 +331,23 @@ unsigned char dct_coeff_length[111]={
     16,16,16,16,16,16,16,16
 };
 
+int macroblockAddressIncre[35];
+
+
+int motionVectorData[33];
+
 vlc::vlc()
 {
     unsigned short code;
     unsigned char shortCode;
     for(int i=0;i<35;++i)
     {
-        code=macroblock_address_increment_code[i];
-        macroblockAddressTable[code]=i+1;
-        macroblockAddressLength[code]=address_code_length[i];
+        macroblockAddressIncre[i]=i+1;
     }
-    for(int i=0;i<2;++i)
-        macroblockTypeTableI[macroblock_type_code_I[i]]=typeI[i];
-    for(int i=0;i<7;++i)
-    {
-        macroblockTypeTableP[macroblock_type_code_P[i]]=typeP[i];
-        macroblockTypeLengthP[macroblock_type_code_P[i]]=type_code_length_P[i];
-    }
-    for(int i=0;i<11;++i)
-    {
-        macroblockTypeTableB[macroblock_type_code_B[i]]=typeB[i];
-        macroblockTypeLengthB[macroblock_type_code_B[i]]=type_code_length_B[i];
-    }
+
     macroblockTypeD={0,0,0,0,1};
     for(int i=0,data=-16;i<33;++i,++data)
-    {
-        code=motion_vector_code[i];
-        motionVectorTable[code]=data;
-        motionVectorLength[code]=motion_vector_length[i];
-    }
-    for(int i=0;i<63;++i)
-    {
-        code=coded_block_pattern_code[i];
-        codedBlockTable[code]=cbp[i];
-        codedBlockLength[code]=cbp_code_length[i];
-    }
+        motionVectorData[i]=data;
     for(int i=0;i<9;++i)
     {
         shortCode=dct_dc_size_luminace_code[i];
@@ -388,13 +355,8 @@ vlc::vlc()
         shortCode=dct_dc_size_chrominance_code[i];
         dctDcSizeChrTable[shortCode]=i;
     }
-    for(int i=0;i<111;++i)
-    {
-        code=dct_coeff_code[i];
-        dctCoeffTable[code]=dctCoeff[i];
-        dctCoeffLength[code]=dct_coeff_length[i];
-    }
 }
+
 
 unsigned char vlc::getMacroAddress(dataStream &stream)
 {
@@ -402,32 +364,187 @@ unsigned char vlc::getMacroAddress(dataStream &stream)
     for(int i=0;i<11;++i)
     {
         code=(code)|(stream.getFirstBit()<<(15-i));
-        if(macroblockAddressTable.count(code)>0&&macroblockAddressLength[code]==(i+1))
-            return macroblockAddressTable[code];
+
+        switch(i)
+        {
+            case(0):
+                if(code==macroblock_address_increment_code[0])
+                    return macroblockAddressIncre[0];
+                break;
+            case(1):
+                break;
+            case(2):
+                for(int j=1;j<3;++j)
+                    if(code==macroblock_address_increment_code[j])
+                        return macroblockAddressIncre[j];
+                break;
+            case(3):
+                for(int j=3;j<5;++j)
+                    if(code==macroblock_address_increment_code[j])
+                        return macroblockAddressIncre[j];
+                break;
+            case(4):
+                for(int j=5;j<7;++j)
+                    if(code==macroblock_address_increment_code[j])
+                        return macroblockAddressIncre[j];
+                break;
+            case(5):
+                break;
+            case(6):
+                for(int j=7;j<9;++j)
+                    if(code==macroblock_address_increment_code[j])
+                        return macroblockAddressIncre[j];
+                break;
+            case(7):
+                for(int j=9;j<15;++j)
+                    if(code==macroblock_address_increment_code[j])
+                        return macroblockAddressIncre[j];
+                break;
+            case(8):
+                break;
+            case(9):
+                for(int j=15;j<21;++j)
+                    if(code==macroblock_address_increment_code[j])
+                        return macroblockAddressIncre[j];
+                break;
+            case(10):
+                for(int j=21;j<35;++j)
+                    if(code==macroblock_address_increment_code[j])
+                        return macroblockAddressIncre[j];
+                break;
+            default:
+                break;
+        };
+
     }
     return 0;
 }
 
+
+
+
+
 macroblock_type vlc::getMacroType(dataStream &stream,unsigned char type)
 {
     unsigned char code=0;
-    for(int i=0;i<6;++i)
+    if(type==I_picture_type)
     {
-        code=(code)|(stream.getFirstBit()<<(7-i));
-        if(type==I_picture_type&&macroblockTypeTableI.count(code)>0)
-            return macroblockTypeTableI[code];
-        if(type==P_picture_type&&macroblockTypeTableP.count(code)>0&&macroblockTypeLengthP[code]==(i+1))
-            return macroblockTypeTableP[code];
-        if(type==B_picture_type&&macroblockTypeTableB.count(code)>0&&macroblockTypeLengthB[code]==(i+1))
+        for(int i=0;i<6;++i)
         {
-            if(i==0)
-                continue;
-            return macroblockTypeTableB[code];
+            code=(code)|(stream.getFirstBit()<<(7-i));
+            switch(code)
+            {
+                case(0b10000000):
+                    return typeI[0];
+                case(0b01000000):
+                    return typeI[1];
+                default:
+                    break;
+            }
         }
-        if(type==D_picture_type&&code==0b10000000)
-            return macroblockTypeD;
     }
+
+    if(type==P_picture_type)
+    {
+        for(int i=0;i<6;++i)
+        {
+            code=(code)|(stream.getFirstBit()<<(7-i));
+            if(i==3)
+                continue;
+            switch(code)
+            {
+                case(0b10000000):
+                    return typeP[0];
+                case(0b01000000):
+                    return typeP[1];
+                case(0b00100000):
+                    return typeP[2];
+                case(0b00011000):
+                    return typeP[3];
+                case(0b00010000):
+                    return typeP[4];
+                case(0b00001000):
+                    return typeP[5];
+                case(0b00000100):
+                    return typeP[6];
+                default:
+                    break;
+            }
+        }
+    }
+
+    if(type==B_picture_type)
+    {
+        for(int i=0;i<6;++i)
+        {
+            code=(code)|(stream.getFirstBit()<<(7-i));
+            switch(i)
+            {
+                case(0):
+                    break;
+                case(1):
+                    switch(code)
+                    {
+                        case(0b10000000):
+                            return typeB[0];
+                        case(0b11000000):
+                            return typeB[1];
+                    };
+                    break;
+                case(2):
+                    switch(code)
+                    {
+                        case(0b01000000):
+                            return typeB[2];
+                        case(0b1100000):
+                            return typeB[3];
+                    };
+                    break;
+                case(3):
+                    switch(code)
+                    {
+                        case(0b00100000):
+                            return typeB[4];
+                        case(0b00110000):
+                            return typeB[5];
+
+                    };
+                    break;
+                case(4):
+                    switch(code)
+                    {
+                        case(0b00011000):
+                            return typeB[6];
+                        case(0b00010000):
+                            return typeB[7];
+                    };
+                    break;
+                case(5):
+                    switch(code)
+                    {
+                        case(0b00001100):
+                            return typeB[8];
+                        case(0b00001000):
+                            return typeB[9];
+                        case(0b00000100):
+                            return typeB[10];
+                    };
+                    break;
+                default:
+                    break;
+            };
+        }
+    }
+
+
+
+
+    if(type==D_picture_type&&stream.getFirstBit())
+            return macroblockTypeD;
+
 }
+
+
 
 int vlc::getMotionCode(dataStream &stream)
 {
@@ -435,12 +552,84 @@ int vlc::getMotionCode(dataStream &stream)
     for(int i=0;i<11;++i)
     {
         code=(code)|(stream.getFirstBit()<<(15-i));
-        if(motionVectorTable.count(code)>0&&motionVectorLength[code]==(i+1))
+        switch(i)
         {
-            return motionVectorTable[code];
-        }
+            case(0):
+                if(code==motion_vector_code[16])
+                    return 0;
+                break;
+            case(1):
+                break;
+            case(2):
+                if(code==motion_vector_code[15])
+                    return motionVectorData[15];
+                if(code==motion_vector_code[17])
+                    return motionVectorData[17];
+                break;
+            case(3):
+                if(code==motion_vector_code[14])
+                    return motionVectorData[14];
+                if(code==motion_vector_code[18])
+                    return motionVectorData[18];
+                break;
+            case(4):
+                if(code==motion_vector_code[13])
+                    return motionVectorData[13];
+                if(code==motion_vector_code[19])
+                    return motionVectorData[19];
+                break;
+            case(5):
+                break;
+            case(6):
+                if(code==motion_vector_code[12])
+                    return motionVectorData[12];
+                if(code==motion_vector_code[20])
+                    return motionVectorData[20];
+                break;
+            case(7):
+                for(int j=9;j<12;j++)
+                {
+                    if(code==motion_vector_code[j])
+                        return motionVectorData[j];
+                }
+                for(int j=21;j<24;j++)
+                {
+                    if(code==motion_vector_code[j])
+                        return motionVectorData[j];
+                }
+                break;
+            case(8):
+                break;
+            case(9):
+                for(int j=6;j<9;j++)
+                {
+                    if(code==motion_vector_code[j])
+                        return motionVectorData[j];
+                }
+                for(int j=24;j<27;j++)
+                {
+                    if(code==motion_vector_code[j])
+                        return motionVectorData[j];
+                }
+                break;
+            case(10):
+                for(int j=0;j<6;j++)
+                {
+                    if(code==motion_vector_code[j])
+                        return motionVectorData[j];
+                }
+                for(int j=27;j<33;j++)
+                {
+                    if(code==motion_vector_code[j])
+                        return motionVectorData[j];
+                }
+                break;
+            default:
+                break;
+        };
     }
 }
+
 
 unsigned short vlc::getCBP(dataStream &stream)
 {
@@ -448,12 +637,69 @@ unsigned short vlc::getCBP(dataStream &stream)
     for(int i=0;i<9;++i)
     {
         code=(code)|(stream.getFirstBit()<<(15-i));
-        if(codedBlockTable.count(code)>0&&codedBlockLength[code]==(i+1))
+
+        switch(i)
         {
-            return codedBlockTable[code];
-        }
+            case(0):
+            case(1):
+                break;
+            case(2):
+                if(code==coded_block_pattern_code[0])
+                    return cbp[0];
+                break;
+            case(3):
+                for(int j=1;j<5;++j)
+                {
+                    if(code==coded_block_pattern_code[j])
+                        return cbp[j];
+                }
+                break;
+            case(4):
+                for(int j=5;j<17;++j)
+                {
+                    if(code==coded_block_pattern_code[j])
+                        return cbp[j];
+                }
+                break;
+            case(5):
+                for(int j=17;j<21;++j)
+                {
+                    if(code==coded_block_pattern_code[j])
+                        return cbp[j];
+                }
+                break;
+            case(6):
+                for(int j=21;j<29;++j)
+                {
+                    if(code==coded_block_pattern_code[j])
+                        return cbp[j];
+                }
+                break;
+            case(7):
+                for(int j=29;j<57;++j)
+                {
+                    if(code==coded_block_pattern_code[j])
+                        return cbp[j];
+                }
+                break;
+            
+            case(8):
+                for(int j=57;j<63;++j)
+                {
+                    if(code==coded_block_pattern_code[j])
+                        return cbp[j];
+                }
+                break;
+            
+            default:
+                break;
+        };
+
+
+
     }
 }
+
 
 unsigned char vlc::getDctDcSizeLum(dataStream &stream)
 {
@@ -480,8 +726,8 @@ unsigned char vlc::getDctDcSizeChr(dataStream &stream)
             return dctDcSizeChrTable[code];
     }
 }
-
-dct_coeff vlc::getDctCoeff(dataStream &stream,unsigned short tag)
+/*
+dct_coeff vlc::get \(dataStream &stream,unsigned short tag)
 {
     unsigned short code=0;
     dct_coeff result;
@@ -528,6 +774,189 @@ dct_coeff vlc::getDctCoeff(dataStream &stream,unsigned short tag)
             }
             return result;
         }
+    }       
+
+}*/
+dct_coeff vlc::getDctCoeff(dataStream &stream,unsigned short tag)
+{
+    unsigned short code=0;
+    dct_coeff result;
+    bool negative;
+    result.run=0;
+    result.level=1;
+    code=stream.getFirstBit();
+    if(tag==dct_coeff_first&&code==dct_coeff_first)
+    {
+        negative=stream.getFirstBit();
+        if(negative)
+            result.level=result.level*-1;
+        return result;
+    }
+    code=(code<<1)|stream.getFirstBit();
+    if(tag==dct_coeff_next&&code==dct_coeff_next)
+    {
+        negative=stream.getFirstBit();
+        if(negative)
+            result.level=result.level*(-1);
+        return result;
+    }
+    if(code==end_of_block)
+    {
+        result.run=end_of_block_run;
+        return result;
+    }
+
+
+    code=code<<14;
+    for(int i=0;i<14;++i)
+    {
+        code=(code)|(stream.getFirstBit()<<(13-i));
+
+        switch(i)
+        {
+            case(0):
+                if(code==dct_coeff_code[0])
+                {
+                    result=dctCoeff[0];
+                    negative=stream.getFirstBit();
+                    if(negative)
+                        result.level=result.level*(-1);
+                    return result;
+                }
+                break;
+            case(1):
+                for(int j=1;j<3;++j)
+                    if(code==dct_coeff_code[j])
+                    {
+                        result=dctCoeff[j];
+                        negative=stream.getFirstBit();
+                        if(negative)
+                            result.level=result.level*(-1);
+                        return result;
+                    }
+                break;
+            case(2):
+                for(int j=3;j<6;++j)
+                    if(code==dct_coeff_code[j])
+                    {
+                        result=dctCoeff[j];
+                        negative=stream.getFirstBit();
+                        if(negative)
+                            result.level=result.level*(-1);
+                        return result;
+                    }
+                break;
+            case(3):
+                for(int j=6;j<10;++j)
+                    if(code==dct_coeff_code[j])
+                    {
+                        result=dctCoeff[j];
+                        negative=stream.getFirstBit();
+                        if(negative)
+                            result.level=result.level*(-1);
+                        return result;
+                    }
+                if(code==dct_coeff_code[14])
+                {    
+                    result=getDctCoeffFixed(stream);
+                    return result;
+                }
+                break;
+            case(4):
+                for(int j=10;j<14;++j)
+                    if(code==dct_coeff_code[j])
+                    {
+                        result=dctCoeff[j];
+                        negative=stream.getFirstBit();
+                        if(negative)
+                            result.level=result.level*(-1);
+                        return result;
+                    }
+                break;
+            case(5):
+                for(int j=15;j<23;++j)
+                    if(code==dct_coeff_code[j])
+                    {
+                        result=dctCoeff[j];
+                        negative=stream.getFirstBit();
+                        if(negative)
+                            result.level=result.level*(-1);
+                        return result;
+                    }
+                break;
+            case(6):
+                break;
+            case(7):
+                for(int j=23;j<31;++j)
+                    if(code==dct_coeff_code[j])
+                    {
+                        result=dctCoeff[j];
+                        negative=stream.getFirstBit();
+                        if(negative)
+                            result.level=result.level*(-1);
+                        return result;
+                    }
+                break;
+            case(8):
+                break;
+            case(9):
+                for(int j=31;j<47;++j)
+                    if(code==dct_coeff_code[j])
+                    {
+                        result=dctCoeff[j];
+                        negative=stream.getFirstBit();
+                        if(negative)
+                            result.level=result.level*(-1);
+                        return result;
+                    }
+                break;
+            case(10):
+                for(int j=47;j<63;++j)
+                    if(code==dct_coeff_code[j])
+                    {
+                        result=dctCoeff[j];
+                        negative=stream.getFirstBit();
+                        if(negative)
+                            result.level=result.level*(-1);
+                        return result;
+                    }
+                break;
+            case(11):
+                for(int j=63;j<79;++j)
+                    if(code==dct_coeff_code[j])
+                    {
+                        result=dctCoeff[j];
+                        negative=stream.getFirstBit();
+                        if(negative)
+                            result.level=result.level*(-1);
+                        return result;
+                    }
+                break;
+            case(12):
+                for(int j=79;j<95;++j)
+                    if(code==dct_coeff_code[j])
+                    {
+                        result=dctCoeff[j];
+                        negative=stream.getFirstBit();
+                        if(negative)
+                            result.level=result.level*(-1);
+                        return result;
+                    }
+                break;
+            case(13):
+                for(int j=95;j<111;++j)
+                    if(code==dct_coeff_code[j])
+                    {
+                        result=dctCoeff[j];
+                        negative=stream.getFirstBit();
+                        if(negative)
+                            result.level=result.level*(-1);
+                        return result;
+                    }
+                break;
+            default:
+                break;
+        };
     }       
 
 }
