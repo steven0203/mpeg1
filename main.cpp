@@ -68,7 +68,7 @@ int main(int argc,char ** argv)
         while(videoDisplayBuffer->empty()&&!videoIsEnd())
         {
             printf("xx\n");
-            sleep(100);
+            usleep(100000);
         }
         if(videoDisplayBuffer->empty()&&videoIsEnd())
             break;
