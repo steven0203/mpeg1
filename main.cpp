@@ -6,7 +6,9 @@
 #include<ctime>
 #include<pthread.h>
 #include<queue>
-#include<windows.h>
+//#include<windows.h>
+#include <unistd.h>
+
 #include<cstdlib>
 #include"code.h"
 
@@ -47,7 +49,7 @@ int main(int argc,char ** argv)
     time_t t1=time(NULL);
 
     //Create thread for decoding the video.
-    queue<Mat *>*videoDisplayBuffer=new queue<Mat *>();
+    queue<Mat *>*videoDisplayBuffer=new queue<Mat *>(); //Buffer used for store the deocded data
     videoArgs *vArgs=(videoArgs*)malloc(sizeof(vArgs));
     vArgs->inputStream=stream;
     vArgs->videoBuffer=videoDisplayBuffer;
@@ -55,31 +57,33 @@ int main(int argc,char ** argv)
     pthread_create(&vThread, NULL, videoThread,(void*)vArgs); 
 
 
-    Sleep(800);
+    usleep(800000); 
     sequenceHeader videoHeader=getSeqHeader();
     int delay=1000/pictue_rate_define[videoHeader.picture_rate]-10;
     Mat *display;
 
     while(true){
+        //If display buffer is empty and video decoding haven't ended,
+        // it need to wait util video have enough data 
         while(videoDisplayBuffer->empty()&&!videoIsEnd())
         {
-            Sleep(100);
+            printf("xx\n");
+            sleep(100);
         }
         if(videoDisplayBuffer->empty()&&videoIsEnd())
             break;
         display=videoDisplayBuffer->front();
         videoDisplayBuffer->pop();
         imshow("Display window", *display); 
-        if(cvWaitKey(delay)==27){                      
+        delete display;
+
+        if(waitKey(delay)==27){                      
             break;
         }
-
-     
     }
 
     pthread_join(vThread, NULL);
     printf("%d\n",time(NULL)-t1);
-
     fclose(inputFile);
 }
 
